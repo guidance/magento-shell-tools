@@ -16,11 +16,14 @@ This projects aims to augment the CLI interface and provide some useful tools.
 The Tools
 -------------------
 
- - **cache**: All functionality that exists in the admin cache management panel. Plus some more!
+ - **cache.php**: All functionality that exists in the admin cache management panel. Plus some more!
    Really useful in deployment scripts.
- - **snapshot**: Create a compressed tar archive of the /media directory and a database dump into 
+ - **snapshot.php**: Create a compressed tar archive of the /media directory and a database dump into 
    a directory called /snapshot.  Useful for developers bootstrapping their local environments off 
    of an existing development environment.
+ - **magentodump.php: Create a database backup using mysqldump.  Also can clean customer and order 
+   data from core tables to create a database dump that can be used for synchronizing environments
+   such as local/dev/stage, etc.
  - More to be added...
 
 Usage
