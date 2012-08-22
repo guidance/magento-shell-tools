@@ -285,13 +285,14 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     {
         return <<<USAGE
 Usage:  php -f magentodump.php -- [command] [options]
-        php -f magentodump.php -- dump --no-data my_table1,my_table2
+        php -f magentodump.php -- dump --clean --exclude-config --custom my_table1,my_table2
 
   Commands:
   dump  Dump database data to stdout
 
   Options:
-  --clean                     Remove customer and transactional data from the database
+  --clean                     Exclude data from the dump (dump table structure only).  A list
+                              of core tables comes included with the script. 
   --custom <table1,table2>    Custom tables to export as structure only without data
   --exclude-config            Do not dump the core_config_data table
 
