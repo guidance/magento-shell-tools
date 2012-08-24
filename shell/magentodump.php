@@ -34,11 +34,16 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     public function run()
     {
         // Usage help
-        if (!$this->getArg('dump')) {
+        if ($this->getArg('dump')) {
+            $this->dump();
+        } else {
             echo $this->usageHelp();
-            exit();
+            exit;
         }
+    }
 
+    public function dump()
+    {
         // Get connection info
         $config = Mage::getConfig()->getResourceConnectionConfig('core_read');
 
@@ -92,11 +97,17 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     protected function getNoDataTables()
     {
         if (is_null($this->_noDataTables)) {
-            $this->_noDataTables = $this->getCoreTables();
+            $coreTables = $this->getCoreTables();
+            $customTables = array();
             if ($this->getArg('custom')) {
-                $customTables = array_map('trim', explode(',', $this->getArg('custom')));
-                $this->_noDataTables = array_merge($this->_noDataTables, $customTables);
+                $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
+                $customTables = array_merge($customTables, $cliCustomTables);
             }
+            if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
+                $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
+                $customTables = array_merge($customTables, $fileCustomTables);
+            }
+            $this->_noDataTables = array_merge($coreTables, $customTables);
         }
         return $this->_noDataTables;
     }
@@ -294,6 +305,8 @@ Usage:  php -f magentodump.php -- [command] [options]
   --clean                     Exclude data from the dump (dump table structure only).  A list
                               of core tables comes included with the script. 
   --custom <table1,table2>    Custom tables to export as structure only without data
+  --customfile <filename>     File with custom tables to export as structure only. One table
+                              name per line
   --exclude-config            Do not dump the core_config_data table
 
 USAGE;
