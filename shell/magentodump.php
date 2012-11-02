@@ -10,8 +10,17 @@ require_once './abstract.php';
  */
 class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 {
-    /** @var array */
-    protected $_noDataTables;
+    protected $config = array(
+        'cleandata'         => false,
+        'connectiontype'    => 'core_read',
+        'databaseconfig'    => null,
+        'exclude-config'    => false,
+        'excludeconfigdata' => false,
+        'mysqldumpcommand'  => 'mysqldump',
+        'tableprefix'       => '',
+    );
+
+    protected $customTables = array();
 
     /** @var string */
     protected $_filename;
@@ -29,6 +38,31 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             echo "Application is not installed yet, please complete install wizard first.";
             exit;
         }
+
+        // Initialize database connection
+        $this->_db = Mage::getSingleton('core/resource')->getConnection($this->config['connectiontype']);
+
+        // Process custom tables
+        if ($this->getArg('custom')) {
+            $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
+            $this->customTables = $cliCustomTables;
+        }
+        if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
+            $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
+            $this->customTables = array_merge($this->customTables, $fileCustomTables);
+        }
+
+        // Configuration
+        $this->config['databaseconfig'] = Mage::getConfig()->getResourceConnectionConfig($this->config['connectiontype']);
+        $this->config['tableprefix']    = (string)Mage::getConfig()->getTablePrefix();
+
+        if ($this->getArg('clean')) {
+            $this->config['cleandata'] = true;
+        }
+        if ($this->getArg('exclude-config')) {
+            $this->config['exclude-config'] = true;
+        }
+
     }
 
     public function run()
@@ -36,6 +70,8 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         // Usage help
         if ($this->getArg('dump')) {
             $this->dump();
+        } elseif ($this->getArg('gettables')) {
+            $this->getTables();
         } else {
             echo $this->usageHelp();
             exit;
@@ -45,33 +81,34 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     public function dump()
     {
         // Get connection info
-        $config = Mage::getConfig()->getResourceConnectionConfig('core_read');
+        $magentoConfig = $this->config['databaseconfig'];
 
         // Base mysqldump command
-        $mysqldump = "mysqldump -h {$config->host} -u {$config->username} -p{$config->password} {$config->dbname}";
+        $mysqldump = "{$this->config['mysqldumpcommand']} -h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
 
         // If not cleaning just execute mysqldump with default settings
-        if (!$this->getArg('clean')) {
+        if (!$this->config['cleandata']) {
             passthru("$mysqldump");
-            exit;
+            return;
         }
 
         $noDataTablesWhere = $this->getNoDataTablesWhere();
 
         $dataSql = "
             SELECT TABLE_NAME FROM information_schema.TABLES
-            WHERE TABLE_NAME NOT IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$config->dbname}'
+            WHERE TABLE_NAME NOT IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ";
 
-        if ($this->getArg('exclude-config')) {
-            $dataSql = "$dataSql AND TABLE_NAME != 'core_config_data'";
+        if ($this->config['exclude-config']) {
+            $tableprefix = (string)Mage::getConfig()->getTablePrefix();
+            $dataSql = "$dataSql AND TABLE_NAME != '{$tableprefix}core_config_data'";
         }
 
         $dataTables = $this->getDb()->fetchCol($dataSql);
 
         $noDataTables = $this->getDb()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
-            WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$config->dbname}'
+            WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
 
         // Dump tables with data
@@ -83,9 +120,6 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 
     protected function getDb()
     {
-        if (is_null($this->_db)) {
-            $this->_db = Mage::getSingleton('core/resource')->getConnection('core_read');
-        }
         return $this->_db;
     }
 
@@ -98,23 +132,26 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     {
         if (is_null($this->_noDataTables)) {
             $coreTables = $this->getCoreTables();
-            $customTables = array();
-            if ($this->getArg('custom')) {
-                $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
-                $customTables = array_merge($customTables, $cliCustomTables);
-            }
-            if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
-                $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
-                $customTables = array_merge($customTables, $fileCustomTables);
-            }
-            $this->_noDataTables = array_merge($coreTables, $customTables);
+            $this->_noDataTables = array_merge($coreTables, $this->customTables);
         }
         return $this->_noDataTables;
     }
 
+    protected function getTables()
+    {
+        $magentoConfig     = $this->config['databaseconfig'];
+        $noDataTablesWhere = $this->getNoDataTablesWhere();
+        $noDataTables      = $this->getDb()->fetchCol("
+            SELECT TABLE_NAME FROM information_schema.TABLES
+            WHERE TABLE_NAME NOT IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
+        ");
+        echo implode("\n", $noDataTables);
+        return;
+    }
+
     protected function getCoreTables()
     {
-        return array(
+        $coretables = array(
             'adminnotification_inbox',
             'api_session',
             'catalogsearch_fulltext',
@@ -125,6 +162,8 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             'catalog_category_anc_products_index_idx',
             'catalog_category_anc_products_index_tmp',
             'catalog_compare_item',
+            'checkout_agreement',
+            'checkout_agreement_store',
             'core_cache',
             'core_cache_tag',
             'core_session',
@@ -210,6 +249,8 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             'paypal_settlement_report',
             'paypal_settlement_report_row',
             'poll_vote',
+            'product_alert_price',
+            'product_alert_stock',
             'rating',
             'rating_entity',
             'rating_option',
@@ -286,6 +327,12 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             'xmlconnect_history',
             'xmlconnect_queue',
         );
+        if ($this->config['tableprefix']) {
+            foreach ($coretables as $i => $table) {
+                $coretables[$i] = "{$this->config['tableprefix']}$table";
+            }
+        }
+        return $coretables;
     }
 
     /**
@@ -299,7 +346,9 @@ Usage:  php -f magentodump.php -- [command] [options]
         php -f magentodump.php -- dump --clean --exclude-config --custom my_table1,my_table2
 
   Commands:
-  dump  Dump database data to stdout
+  dump        Dump database data to stdout
+  gettables   Outputs all tables in the database that are not known core.  Useful
+              for the creating your custom table file
 
   Options:
   --clean                     Exclude data from the dump (dump table structure only).  A list
