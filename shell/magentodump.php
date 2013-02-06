@@ -15,6 +15,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         'connectiontype'    => 'core_read',
         'databaseconfig'    => null,
         'exclude-config'    => false,
+        'exclude-eav-entity-store'    => false,
         'excludeconfigdata' => false,
         'mysqldumpcommand'  => 'mysqldump',
         'tableprefix'       => '',
@@ -62,6 +63,9 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         if ($this->getArg('exclude-config')) {
             $this->config['exclude-config'] = true;
         }
+        if ($this->getArg('exclude-eav-entity-store')) {
+            $this->config['exclude-eav-entity-store'] = true;
+        }
 
     }
 
@@ -70,8 +74,10 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         // Usage help
         if ($this->getArg('dump')) {
             $this->dump();
-        } elseif ($this->getArg('gettables')) {
-            $this->getTables();
+        } elseif ($this->getArg('datatables')) {
+            $this->getTablesWithData();
+        } elseif ($this->getArg('nodatatables')) {
+            $this->getTablesWithoutData();
         } else {
             echo $this->usageHelp();
             exit;
@@ -102,6 +108,11 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         if ($this->config['exclude-config']) {
             $tableprefix = (string)Mage::getConfig()->getTablePrefix();
             $dataSql = "$dataSql AND TABLE_NAME != '{$tableprefix}core_config_data'";
+        }
+
+        if ($this->config['exclude-eav-entity-store']) {
+            $tableprefix = (string)Mage::getConfig()->getTablePrefix();
+            $dataSql = "$dataSql AND TABLE_NAME != '{$tableprefix}eav_entity_store'";
         }
 
         $dataTables = $this->getDb()->fetchCol($dataSql);
@@ -137,13 +148,25 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return $this->_noDataTables;
     }
 
-    protected function getTables()
+    protected function getTablesWithData()
     {
         $magentoConfig     = $this->config['databaseconfig'];
         $noDataTablesWhere = $this->getNoDataTablesWhere();
         $noDataTables      = $this->getDb()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME NOT IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
+        ");
+        echo implode("\n", $noDataTables);
+        return;
+    }
+
+    protected function getTablesWithoutData()
+    {
+        $magentoConfig     = $this->config['databaseconfig'];
+        $noDataTablesWhere = $this->getNoDataTablesWhere();
+        $noDataTables      = $this->getDb()->fetchCol("
+            SELECT TABLE_NAME FROM information_schema.TABLES
+            WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
         echo implode("\n", $noDataTables);
         return;
@@ -157,6 +180,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             'catalogsearch_fulltext',
             'catalogsearch_query',
             'catalogsearch_recommendations',
+            'catalogsearch_result',
             'catalog_category_anc_categs_index_idx',
             'catalog_category_anc_categs_index_tmp',
             'catalog_category_anc_products_index_idx',
@@ -194,6 +218,8 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             'enterprise_customer_sales_flat_order_address',
             'enterprise_customer_sales_flat_quote',
             'enterprise_customer_sales_flat_quote_address',
+            'enterprise_customerbalance',
+            'enterprise_customerbalance_history',
             'enterprise_customersegment_customer',
             'enterprise_giftcardaccount',
             'enterprise_giftcardaccount_history',
@@ -346,17 +372,33 @@ Usage:  php -f magentodump.php -- [command] [options]
         php -f magentodump.php -- dump --clean --exclude-config --custom my_table1,my_table2
 
   Commands:
-  dump        Dump database data to stdout
-  gettables   Outputs all tables in the database that are not known core.  Useful
-              for the creating your custom table file
+
+      dump
+            Dump database data to stdout
+
+      datatables
+            Outputs tables in the database which will be exported with data
+
+      nodatatables
+            Outputs tables in the database which will be exported without data
 
   Options:
-  --clean                     Exclude data from the dump (dump table structure only).  A list
-                              of core tables comes included with the script. 
-  --custom <table1,table2>    Custom tables to export as structure only without data
-  --customfile <filename>     File with custom tables to export as structure only. One table
-                              name per line
-  --exclude-config            Do not dump the core_config_data table
+      --clean
+            Exclude data from the dump (dump table structure only).  A list
+            of core tables comes included with the script.
+
+      --custom <table1,table2>
+            Custom tables to export as structure only without data
+
+      --customfile <filename>
+            File with custom tables to export as structure only. One table
+            name per line
+
+      --exclude-config
+            Do not dump the core_config_data table (configuration data)
+
+      --exclude-eav-entity-store
+            Do not dump the eav_entity_store table (increment ids)
 
 USAGE;
     }
