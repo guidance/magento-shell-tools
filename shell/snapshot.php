@@ -44,8 +44,10 @@ class Guidance_Shell_Snapshot extends Mage_Shell_Abstract
         # Create the media archive
         exec("tar -chz -C \"$rootpath\" -f \"{$snapshot}/media.tgz\" media");
 
+        $password = escapeshellarg($connection->password);
+
         # Dump the database
-        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$connection->password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}.sql.gz\"");
+        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}.sql.gz\"");
     }
 
     /**
