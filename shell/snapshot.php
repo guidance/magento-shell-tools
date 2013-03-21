@@ -41,13 +41,16 @@ class Guidance_Shell_Snapshot extends Mage_Shell_Abstract
         $io = new Varien_Io_File();
         $io->mkdir($snapshot);
 
+        # Prep date for snapshot filenames
+        $date_str = date("Y-m-d");
+
         # Create the media archive
-        exec("tar -chz -C \"$rootpath\" -f \"{$snapshot}/media.tgz\" media");
+        exec("tar -chz -C \"$rootpath\" -f \"{$snapshot}/media-{$date_str}.tgz\" media");
 
         $password = escapeshellarg($connection->password);
 
         # Dump the database
-        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}.sql.gz\"");
+        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}-{$date_str}.sql.gz\"");
     }
 
     /**
