@@ -41,13 +41,19 @@ class Guidance_Shell_Snapshot extends Mage_Shell_Abstract
         $io = new Varien_Io_File();
         $io->mkdir($snapshot);
 
+        # Prep suffix for snapshot filenames
+        $file_suffix = '';
+        if ($this->getArg('date')) {
+            $file_suffix = '-'.date("Y-m-d");
+        }
+
         # Create the media archive
-        exec("tar -chz -C \"$rootpath\" -f \"{$snapshot}/media.tgz\" media");
+        exec("tar -chz -C \"$rootpath\" -f \"{$snapshot}/media{$file_suffix}.tgz\" media");
 
         $password = escapeshellarg($connection->password);
 
         # Dump the database
-        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}.sql.gz\"");
+        exec("mysqldump -h {$connection->host} -u {$connection->username} --password={$password} {$connection->dbname} | gzip > \"{$snapshot}/{$connection->dbname}{$file_suffix}.sql.gz\"");
     }
 
     /**
@@ -77,13 +83,16 @@ Snapshot
 Saves a tarball of the media directory and a gzipped database dump
 taken with mysqldump
 
-Usage:  php -f $self -- [options]
+Usage:  php -f $self -- [command] [options]
 
-Options:
+  Commands:
+      help              This help
+      snapshot          Take snapshot
 
-  help              This help
-  snapshot          Take snapshot
-  
+  Options:
+      --date            Add a date to the media tarball and database dump filenames.
+
+
 USAGE;
     }
 }
