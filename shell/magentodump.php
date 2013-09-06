@@ -116,11 +116,13 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         }
 
         $dataTables = $this->getDb()->fetchCol($dataSql);
-
+        $dataTables = array_map('escapeshellarg', $dataTables);
+        
         $noDataTables = $this->getDb()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
+        $noDataTables = array_map('escapeshellarg', $noDataTables);
 
         // Dump tables with data
         passthru("$mysqldump " . implode(' ', $dataTables));
