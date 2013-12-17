@@ -424,21 +424,26 @@ Usage:  php -f magentodump.php -- [command] [options]
 
   Options:
       --clean
-            Exclude data from the dump (dump table structure only).  A list
-            of core tables comes included with the script.
+            Excludes customer or system instance related data from the dump such as 
+            (customers, logs, etc) by exporting certain tables as structure only 
+            without their data.  
 
       --custom <table1,table2>
-            Custom tables to export as structure only without data
+            Comma separated list of tables to export as structure only without data
+            (only applies when running with --clean)
 
       --customfile <filename>
-            File with custom tables to export as structure only. One table
-            name per line
+            Name of a file with a list of tables to export as structure only. One table
+            name per line 
+            (only applies when running with --clean)
 
       --exclude-config
-            Do not dump the core_config_data table (configuration data)
+            Do not dump the core_config_data table (configuration data) 
+            (only applies when running with --clean)
 
       --exclude-eav-entity-store
             Do not dump the eav_entity_store table (increment ids)
+            (only applies when running with --clean)
 
 USAGE;
     }
