@@ -12,12 +12,15 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 {
     protected $config = array(
         'cleandata'         => false,
+        'compressdata'      => false,
         'connectiontype'    => 'core_read',
         'databaseconfig'    => null,
         'exclude-config'    => false,
         'exclude-eav-entity-store'    => false,
         'excludeconfigdata' => false,
         'mysqldumpcommand'  => 'mysqldump',
+        'compresscommand'   => 'gzip',
+        'mysqldumpcommand_suffix'   => " | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/'",
         'tableprefix'       => '',
     );
 
@@ -66,6 +69,9 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         if ($this->getArg('exclude-eav-entity-store')) {
             $this->config['exclude-eav-entity-store'] = true;
         }
+        if ($this->getArg('compress')) {
+            $this->config['compressdata'] = true;
+        }
 
     }
 
@@ -101,6 +107,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         }
 
         $noDataTablesWhere = $this->getNoDataTablesWhere();
+        $compressoutput = '';
 
         $dataSql = "
             SELECT TABLE_NAME FROM information_schema.TABLES
@@ -117,9 +124,13 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             $dataSql = "$dataSql AND TABLE_NAME != '{$tableprefix}eav_entity_store'";
         }
 
+        if ($this->config['compressdata']) {
+            // $this->config['mysqldump_suffix'] .= " | {$this->config['compresscommand']} ";
+        }
+
         $dataTables = $this->getDb()->fetchCol($dataSql);
         $dataTables = array_map('escapeshellarg', $dataTables);
-        
+
         $noDataTables = $this->getDb()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
@@ -127,10 +138,10 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         $noDataTables = array_map('escapeshellarg', $noDataTables);
 
         // Dump tables with data
-        passthru("$mysqldump " . implode(' ', $dataTables));
+        echo("$mysqldump " . implode(' ', $dataTables) . $this->config['mysqldumpcommand_suffix']);
 
         // Dump tables without data
-        passthru("$mysqldump --no-data " . implode(' ', $noDataTables));
+        echo("$mysqldump --no-data " . implode(' ', $noDataTables) . $this->config['mysqldumpcommand_suffix']);
     }
 
     protected function getDb()
@@ -444,6 +455,9 @@ Usage:  php -f magentodump.php -- [command] [options]
       --exclude-eav-entity-store
             Do not dump the eav_entity_store table (increment ids)
             (only applies when running with --clean)
+
+      --compress
+            Dump the output to gzip for a compressed file
 
 USAGE;
     }
