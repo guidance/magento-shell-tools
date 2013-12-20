@@ -18,6 +18,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         'exclude-eav-entity-store'    => false,
         'excludeconfigdata' => false,
         'mysqldumpcommand'  => 'mysqldump',
+        'mysqldumpcommand_suffix'   => " | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' ",
         'tableprefix'       => '',
     );
 
@@ -119,7 +120,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 
         $dataTables = $this->getDb()->fetchCol($dataSql);
         $dataTables = array_map('escapeshellarg', $dataTables);
-        
+
         $noDataTables = $this->getDb()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
@@ -127,10 +128,10 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         $noDataTables = array_map('escapeshellarg', $noDataTables);
 
         // Dump tables with data
-        passthru("$mysqldump " . implode(' ', $dataTables));
+        passthru("$mysqldump " . implode(' ', $dataTables) . $this->config['mysqldumpcommand_suffix']);
 
         // Dump tables without data
-        passthru("$mysqldump --no-data " . implode(' ', $noDataTables));
+        passthru("$mysqldump --no-data " . implode(' ', $noDataTables) . $this->config['mysqldumpcommand_suffix']);
     }
 
     protected function getDb()
