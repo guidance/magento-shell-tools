@@ -95,7 +95,7 @@ Using magentodump.php (Workflow)
        * `php magentodump.php -- customtables > customer-customtables.txt`
      * Open the custom tables file in a text editor
      * Remove any tables from this list which you would like to include data for, leave any tables which should be dumped without data (usually easy to determine by inspecting the database schema, ie. customer_id, order_id fields, etc)
-     * The remaining tables will be used with magentodump
+     * What remains in this file are the tables which will be used with magentodump
   1. Execute magentodump.php with --clean enabled and the custom tables file created above
      * `php magentodump.php -- dump --clean --customfile customer-customtables.txt | gzip > 2014-01-28-customer-db.sql.gz`
 
