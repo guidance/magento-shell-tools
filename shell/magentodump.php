@@ -23,7 +23,7 @@
  * @license   http://www.apache.org/licenses/LICENSE-2.0  Apache License 2.0
  */
 
-require_once './abstract.php';
+require 'abstract.php';
 
 /**
  * Class Guidance_Shell_Magentodump
@@ -60,7 +60,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         // Check to make sure Magento is installed
         if (!Mage::isInstalled()) {
             echo "Application is not installed yet, please complete install wizard first.";
-            exit;
+            exit(1);
         }
 
         // Initialize database connection
@@ -103,10 +103,28 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             $this->getTablesWithoutData();
         } elseif ($this->getArg('customtables')) {
             $this->getCustomTables();
+        } elseif ($this->getArg('databasecredentials')) {
+            $this->getDatabaseCredentials();
         } else {
             echo $this->usageHelp();
             exit;
         }
+    }
+
+    public function getDatabaseCredentials()
+    {
+        echo $this->getMysqlConfigString() . PHP_EOL;
+    }
+
+    public function getMysqlConfigString()
+    {
+        // Get connection info
+        $magentoConfig = $this->config['databaseconfig'];
+
+        // Base mysql command
+        $config = "-h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
+
+        return $config;
     }
 
     public function dump()
@@ -115,7 +133,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         $magentoConfig = $this->config['databaseconfig'];
 
         // Base mysqldump command
-        $mysqldump = "{$this->config['mysqldumpcommand']} -h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
+        $mysqldump = "{$this->config['mysqldumpcommand']} {$this->getMysqlConfigString()}";
 
         // If not cleaning just execute mysqldump with default settings
         if (!$this->config['cleandata']) {
