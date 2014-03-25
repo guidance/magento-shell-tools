@@ -44,8 +44,6 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         'tableprefix'       => '',
     );
 
-    protected $customTables = array();
-
     /** @var string */
     protected $_filename;
 
@@ -55,12 +53,14 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     /** @var array */
     protected $_customTables = array();
 
+    /** @var array */
+    protected $_noDataTables;
+
     public function _construct()
     {
         // Check to make sure Magento is installed
         if (!Mage::isInstalled()) {
-            echo "Application is not installed yet, please complete install wizard first.";
-            exit(1);
+            $this->_die("Application is not installed yet, please complete install wizard first.");
         }
 
         // Initialize database connection
@@ -69,11 +69,11 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         // Process custom tables
         if ($this->getArg('custom')) {
             $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
-            $this->customTables = $cliCustomTables;
+            $this->_customTables = $cliCustomTables;
         }
         if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
             $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
-            $this->customTables = array_merge($this->customTables, $fileCustomTables);
+            $this->_customTables = array_merge($this->_customTables, $fileCustomTables);
         }
 
         // Configuration
@@ -96,44 +96,47 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
     {
         // Usage help
         if ($this->getArg('dump')) {
-            $this->dump();
+            $this->_dump();
         } elseif ($this->getArg('datatables')) {
-            $this->getTablesWithData();
+            $this->_getTablesWithData();
         } elseif ($this->getArg('nodatatables')) {
-            $this->getTablesWithoutData();
+            $this->_getTablesWithoutData();
         } elseif ($this->getArg('customtables')) {
-            $this->getCustomTables();
+            $this->_getCustomTables();
         } elseif ($this->getArg('databasecredentials')) {
-            $this->getDatabaseCredentials();
+            $this->_getDatabaseCredentials();
         } else {
             echo $this->usageHelp();
             exit;
         }
     }
 
-    public function getDatabaseCredentials()
+    protected function _getDatabaseCredentials()
     {
-        echo $this->getMysqlConfigString() . PHP_EOL;
+        echo $this->_getMysqlConfigurationString() . PHP_EOL;
     }
 
-    public function getMysqlConfigString()
+    /**
+     * @return string
+     */
+    protected function _getMysqlConfigurationString()
     {
         // Get connection info
         $magentoConfig = $this->config['databaseconfig'];
 
-        // Base mysql command
+        // Base configuration needed for mysql and mysqldump commands
         $config = "-h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
 
         return $config;
     }
 
-    public function dump()
+    protected function _dump()
     {
         // Get connection info
         $magentoConfig = $this->config['databaseconfig'];
 
         // Base mysqldump command
-        $mysqldump = "{$this->config['mysqldumpcommand']} {$this->getMysqlConfigString()}";
+        $mysqldump = "{$this->config['mysqldumpcommand']} {$this->_getMysqlConfigurationString()}";
 
         // If not cleaning just execute mysqldump with default settings
         if (!$this->config['cleandata']) {
@@ -141,7 +144,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             return;
         }
 
-        $noDataTablesWhere = $this->getNoDataTablesWhere();
+        $noDataTablesWhere = $this->_getNoDataTablesWhere();
 
         $dataSql = "
             SELECT TABLE_NAME FROM information_schema.TABLES
@@ -158,10 +161,10 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             $dataSql = "$dataSql AND TABLE_NAME != '{$tableprefix}eav_entity_store'";
         }
 
-        $dataTables = $this->getDb()->fetchCol($dataSql);
+        $dataTables = $this->_getConnection()->fetchCol($dataSql);
         $dataTables = array_map('escapeshellarg', $dataTables);
 
-        $noDataTables = $this->getDb()->fetchCol("
+        $noDataTables = $this->_getConnection()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
@@ -174,22 +177,22 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         passthru("$mysqldump --no-data " . implode(' ', $noDataTables) . $this->config['mysqldumpcommand_suffix']);
     }
 
-    protected function getDb()
+    protected function _getConnection()
     {
         return $this->_db;
     }
 
-    protected function getNoDataTablesWhere()
+    protected function _getNoDataTablesWhere()
     {
-        return $this->createWhereFromArray($this->getNoDataTables());
+        return $this->_createWhereFromArray($this->_getNoDataTables());
     }
 
-    protected function getCoreTablesWhere()
+    protected function _getCoreTablesWhere()
     {
-        return $this->createWhereFromArray($this->getCoreTableNames());
+        return $this->_createWhereFromArray($this->_getCoreTableNames());
     }
 
-    protected function createWhereFromArray($array)
+    protected function _createWhereFromArray($array)
     {
         if (!is_array($array)) {
             throw new Exception('Expecting $array to be an array');
@@ -197,20 +200,23 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return "('" . implode("', '", $array) . "')";
     }
 
-    protected function getNoDataTables()
+    /**
+     * @return array
+     */
+    protected function _getNoDataTables()
     {
         if (is_null($this->_noDataTables)) {
-            $coreTables = $this->getCoreTables();
-            $this->_noDataTables = array_merge($coreTables, $this->customTables);
+            $coreTables = $this->_getCoreTables();
+            $this->_noDataTables = array_merge($coreTables, $this->_customTables);
         }
         return $this->_noDataTables;
     }
 
-    protected function getCustomTables()
+    protected function _getCustomTables()
     {
         $magentoConfig   = $this->config['databaseconfig'];
-        $coreTablesWhere = $this->getCoreTablesWhere();
-        $customTables    = $this->getDb()->fetchCol("
+        $coreTablesWhere = $this->_getCoreTablesWhere();
+        $customTables    = $this->_getConnection()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME NOT IN {$coreTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
@@ -218,9 +224,9 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return;
     }
 
-    protected function getCoreTableNames()
+    protected function _getCoreTableNames()
     {
-        $coretables = explode("\n", self::MAGENTO_CORE_TABLES);
+        $coretables = explode("\n", self::KNOWN_MAGENTO_CORE_TABLES);
         if ($this->config['tableprefix']) {
             foreach ($coretables as $i => $table) {
                 $coretables[$i] = "{$this->config['tableprefix']}$table";
@@ -229,11 +235,11 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return $coretables;
     }
 
-    protected function getTablesWithData()
+    protected function _getTablesWithData()
     {
         $magentoConfig     = $this->config['databaseconfig'];
-        $noDataTablesWhere = $this->getNoDataTablesWhere();
-        $noDataTables      = $this->getDb()->fetchCol("
+        $noDataTablesWhere = $this->_getNoDataTablesWhere();
+        $noDataTables      = $this->_getConnection()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME NOT IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
@@ -241,11 +247,11 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return;
     }
 
-    protected function getTablesWithoutData()
+    protected function _getTablesWithoutData()
     {
         $magentoConfig     = $this->config['databaseconfig'];
-        $noDataTablesWhere = $this->getNoDataTablesWhere();
-        $noDataTables      = $this->getDb()->fetchCol("
+        $noDataTablesWhere = $this->_getNoDataTablesWhere();
+        $noDataTables      = $this->_getConnection()->fetchCol("
             SELECT TABLE_NAME FROM information_schema.TABLES
             WHERE TABLE_NAME IN {$noDataTablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
         ");
@@ -253,190 +259,21 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return;
     }
 
-    protected function getCoreTables()
+    protected function _getCoreTables()
     {
-        $coretables = array(
-            'adminnotification_inbox',
-            'api_session',
-            'catalogsearch_fulltext',
-            'catalogsearch_query',
-            'catalogsearch_recommendations',
-            'catalogsearch_result',
-            'catalog_category_anc_categs_index_idx',
-            'catalog_category_anc_categs_index_tmp',
-            'catalog_category_anc_products_index_idx',
-            'catalog_category_anc_products_index_tmp',
-            'catalog_compare_item',
-            'checkout_agreement',
-            'checkout_agreement_store',
-            'core_cache',
-            'core_cache_tag',
-            'core_session',
-            'coupon_aggregated',
-            'coupon_aggregated_order',
-            'cron_schedule',
-            'customer_address_entity',
-            'customer_address_entity_datetime',
-            'customer_address_entity_decimal',
-            'customer_address_entity_int',
-            'customer_address_entity_text',
-            'customer_address_entity_varchar',
-            'customer_entity',
-            'customer_entity_datetime',
-            'customer_entity_decimal',
-            'customer_entity_int',
-            'customer_entity_text',
-            'customer_entity_varchar',
-            'dataflow_batch',
-            'dataflow_batch_export',
-            'dataflow_batch_import',
-            'dataflow_import_data',
-            'dataflow_profile_history',
-            'dataflow_session',
-            'downloadable_link_purchased',
-            'downloadable_link_purchased_item',
-            'enterprise_customer_sales_flat_order',
-            'enterprise_customer_sales_flat_order_address',
-            'enterprise_customer_sales_flat_quote',
-            'enterprise_customer_sales_flat_quote_address',
-            'enterprise_customerbalance',
-            'enterprise_customerbalance_history',
-            'enterprise_customersegment_customer',
-            'enterprise_giftcardaccount',
-            'enterprise_giftcardaccount_history',
-            'enterprise_giftcardaccount_pool',
-            'enterprise_giftregistry_data',
-            'enterprise_giftregistry_entity',
-            'enterprise_giftregistry_item',
-            'enterprise_giftregistry_item_option',
-            'enterprise_giftregistry_label',
-            'enterprise_giftregistry_person',
-            'enterprise_giftregistry_type',
-            'enterprise_giftregistry_type_info',
-            'enterprise_invitation',
-            'enterprise_invitation_status_history',
-            'enterprise_invitation_track',
-            'enterprise_logging_event',
-            'enterprise_logging_event_changes',
-            'enterprise_reminder_rule_log',
-            'enterprise_reward',
-            'enterprise_reward_history',
-            'enterprise_sales_creditmemo_grid_archive',
-            'enterprise_sales_invoice_grid_archive',
-            'enterprise_sales_order_grid_archive',
-            'enterprise_sales_shipment_grid_archive',
-            'gift_message',
-            'googlebase_attributes',
-            'googlebase_items',
-            'googlecheckout_api_debug',
-            'googlecheckout_notification',
-            'googleoptimizer_code',
-            'importexport_importdata',
-            'index_event',
-            'index_process',
-            'index_process_event',
-            'log_customer',
-            'log_quote',
-            'log_summary',
-            'log_summary_type',
-            'log_url',
-            'log_url_info',
-            'log_visitor',
-            'log_visitor_info',
-            'log_visitor_online',
-            'newsletter_problem',
-            'newsletter_queue',
-            'newsletter_queue_link',
-            'newsletter_queue_store_link',
-            'newsletter_subscriber',
-            'paygate_authorizenet_debug',
-            'paypaluk_api_debug',
-            'paypal_api_debug',
-            'paypal_cert',
-            'paypal_settlement_report',
-            'paypal_settlement_report_row',
-            'poll_vote',
-            'product_alert_price',
-            'product_alert_stock',
-            'rating',
-            'rating_entity',
-            'rating_option',
-            'rating_option_vote',
-            'rating_option_vote_aggregated',
-            'rating_store',
-            'rating_title',
-            'remember_me',
-            'report_compared_product_index',
-            'report_event',
-            'report_viewed_product_index',
-            'review',
-            'review_detail',
-            'review_entity',
-            'review_entity_summary',
-            'review_status',
-            'review_store',
-            'salesrule_coupon_usage',
-            'salesrule_customer',
-            'sales_bestsellers_aggregated_daily',
-            'sales_bestsellers_aggregated_monthly',
-            'sales_bestsellers_aggregated_yearly',
-            'sales_billing_agreement',
-            'sales_billing_agreement_order',
-            'sales_flat_creditmemo',
-            'sales_flat_creditmemo_comment',
-            'sales_flat_creditmemo_grid',
-            'sales_flat_creditmemo_item',
-            'sales_flat_invoice',
-            'sales_flat_invoice_comment',
-            'sales_flat_invoice_grid',
-            'sales_flat_invoice_item',
-            'sales_flat_order',
-            'sales_flat_order_address',
-            'sales_flat_order_grid',
-            'sales_flat_order_item',
-            'sales_flat_order_payment',
-            'sales_flat_order_status_history',
-            'sales_flat_quote',
-            'sales_flat_quote_address',
-            'sales_flat_quote_address_item',
-            'sales_flat_quote_item',
-            'sales_flat_quote_item_option',
-            'sales_flat_quote_payment',
-            'sales_flat_quote_shipping_rate',
-            'sales_flat_shipment',
-            'sales_flat_shipment_comment',
-            'sales_flat_shipment_grid',
-            'sales_flat_shipment_item',
-            'sales_flat_shipment_track',
-            'sales_invoiced_aggregated',
-            'sales_invoiced_aggregated_order',
-            'sales_order_aggregated_created',
-            'sales_order_tax',
-            'sales_payment_transaction',
-            'sales_recurring_profile',
-            'sales_recurring_profile_order',
-            'sales_refunded_aggregated',
-            'sales_refunded_aggregated_order',
-            'sales_shipping_aggregated',
-            'sales_shipping_aggregated_order',
-            'sitemap',
-            'tag',
-            'tag_properties',
-            'tag_relation',
-            'tag_summary',
-            'tax_order_aggregated_created',
-            'wishlist',
-            'wishlist_item',
-            'wishlist_item_option',
-            'xmlconnect_history',
-            'xmlconnect_queue',
-        );
+        $coretables = explode("\n", self::DEFAULT_TABLES_TO_EXPORT_WITHOUT_DATA);
         if ($this->config['tableprefix']) {
             foreach ($coretables as $i => $table) {
                 $coretables[$i] = "{$this->config['tableprefix']}$table";
             }
         }
         return $coretables;
+    }
+
+    protected function _die($message)
+    {
+        fwrite(STDERR, $message . PHP_EOL);
+        exit(1);
     }
 
     /**
@@ -463,7 +300,8 @@ Usage:  php -f magentodump.php -- [command] [options]
       customtables
             Outputs tables in the database which are not recognized as Magento core
 
-  Options:
+  Dump Options:
+
       --clean
             Excludes customer or system instance related data from the dump such as 
             (customers, logs, etc) by exporting certain tables as structure only 
@@ -489,7 +327,236 @@ Usage:  php -f magentodump.php -- [command] [options]
 USAGE;
     }
 
-    const MAGENTO_CORE_TABLES = <<<EOF
+    const DEFAULT_TABLES_TO_EXPORT_WITHOUT_DATA = <<<EOF
+adminnotification_inbox
+api_session
+catalog_category_anc_categs_index_idx
+catalog_category_anc_categs_index_tmp
+catalog_category_anc_products_index_idx
+catalog_category_anc_products_index_tmp
+catalog_category_flat_cl
+catalog_category_product_cat_cl
+catalog_category_product_index_cl
+catalog_compare_item
+catalog_product_flat_cl
+catalog_product_index_eav
+catalog_product_index_eav_decimal
+catalog_product_index_eav_decimal_idx
+catalog_product_index_eav_decimal_tmp
+catalog_product_index_eav_idx
+catalog_product_index_eav_tmp
+catalog_product_index_group_price
+catalog_product_index_price
+catalog_product_index_price_bundle_idx
+catalog_product_index_price_bundle_opt_idx
+catalog_product_index_price_bundle_opt_tmp
+catalog_product_index_price_bundle_sel_idx
+catalog_product_index_price_bundle_sel_tmp
+catalog_product_index_price_bundle_tmp
+catalog_product_index_price_cfg_opt_agr_idx
+catalog_product_index_price_cfg_opt_agr_tmp
+catalog_product_index_price_cfg_opt_idx
+catalog_product_index_price_cfg_opt_tmp
+catalog_product_index_price_cl
+catalog_product_index_price_downlod_idx
+catalog_product_index_price_downlod_tmp
+catalog_product_index_price_final_idx
+catalog_product_index_price_final_tmp
+catalog_product_index_price_idx
+catalog_product_index_price_opt_agr_idx
+catalog_product_index_price_opt_agr_tmp
+catalog_product_index_price_opt_idx
+catalog_product_index_price_opt_tmp
+catalog_product_index_price_tmp
+catalog_product_index_tier_price
+catalog_product_index_website
+cataloginventory_stock_status_cl
+cataloginventory_stock_status_idx
+cataloginventory_stock_status_tmp
+catalogsearch_fulltext
+catalogsearch_fulltext_cl
+catalogsearch_query
+catalogsearch_recommendations
+catalogsearch_result
+checkout_agreement
+checkout_agreement_store
+core_cache
+core_cache_tag
+core_session
+coupon_aggregated
+coupon_aggregated_order
+cron_schedule
+customer_address_entity
+customer_address_entity_datetime
+customer_address_entity_decimal
+customer_address_entity_int
+customer_address_entity_text
+customer_address_entity_varchar
+customer_entity
+customer_entity_datetime
+customer_entity_decimal
+customer_entity_int
+customer_entity_text
+customer_entity_varchar
+dataflow_batch
+dataflow_batch_export
+dataflow_batch_import
+dataflow_import_data
+dataflow_profile_history
+dataflow_session
+downloadable_link_purchased
+downloadable_link_purchased_item
+enterprise_catalogpermissions_index
+enterprise_catalogpermissions_index_product
+enterprise_customer_sales_flat_order
+enterprise_customer_sales_flat_order_address
+enterprise_customer_sales_flat_quote
+enterprise_customer_sales_flat_quote_address
+enterprise_customerbalance
+enterprise_customerbalance_history
+enterprise_customersegment_customer
+enterprise_giftcardaccount
+enterprise_giftcardaccount_history
+enterprise_giftcardaccount_pool
+enterprise_giftregistry_data
+enterprise_giftregistry_entity
+enterprise_giftregistry_item
+enterprise_giftregistry_item_option
+enterprise_giftregistry_label
+enterprise_giftregistry_person
+enterprise_giftregistry_type
+enterprise_giftregistry_type_info
+enterprise_index_multiplier
+enterprise_invitation
+enterprise_invitation_status_history
+enterprise_invitation_track
+enterprise_logging_event
+enterprise_logging_event_changes
+enterprise_reminder_rule_log
+enterprise_reward
+enterprise_reward_history
+enterprise_sales_creditmemo_grid_archive
+enterprise_sales_invoice_grid_archive
+enterprise_sales_order_grid_archive
+enterprise_sales_shipment_grid_archive
+enterprise_targetrule_index
+enterprise_targetrule_index_crosssell
+enterprise_targetrule_index_crosssell_product
+enterprise_targetrule_index_related
+enterprise_targetrule_index_related_product
+enterprise_targetrule_index_upsell
+enterprise_targetrule_index_upsell_product
+enterprise_url_rewrite_category_cl
+enterprise_url_rewrite_product_cl
+enterprise_url_rewrite_redirect_cl
+gift_message
+googlebase_attributes
+googlebase_items
+googlecheckout_api_debug
+googlecheckout_notification
+googleoptimizer_code
+importexport_importdata
+index_event
+index_process
+index_process_event
+log_customer
+log_quote
+log_summary
+log_summary_type
+log_url
+log_url_info
+log_visitor
+log_visitor_info
+log_visitor_online
+newsletter_problem
+newsletter_queue
+newsletter_queue_link
+newsletter_queue_store_link
+newsletter_subscriber
+paygate_authorizenet_debug
+paypal_api_debug
+paypal_cert
+paypal_settlement_report
+paypal_settlement_report_row
+paypaluk_api_debug
+poll_vote
+product_alert_price
+product_alert_stock
+rating
+rating_entity
+rating_option
+rating_option_vote
+rating_option_vote_aggregated
+rating_store
+rating_title
+remember_me
+report_compared_product_index
+report_event
+report_viewed_product_index
+review
+review_detail
+review_entity
+review_entity_summary
+review_status
+review_store
+sales_bestsellers_aggregated_daily
+sales_bestsellers_aggregated_monthly
+sales_bestsellers_aggregated_yearly
+sales_billing_agreement
+sales_billing_agreement_order
+sales_flat_creditmemo
+sales_flat_creditmemo_comment
+sales_flat_creditmemo_grid
+sales_flat_creditmemo_item
+sales_flat_invoice
+sales_flat_invoice_comment
+sales_flat_invoice_grid
+sales_flat_invoice_item
+sales_flat_order
+sales_flat_order_address
+sales_flat_order_grid
+sales_flat_order_item
+sales_flat_order_payment
+sales_flat_order_status_history
+sales_flat_quote
+sales_flat_quote_address
+sales_flat_quote_address_item
+sales_flat_quote_item
+sales_flat_quote_item_option
+sales_flat_quote_payment
+sales_flat_quote_shipping_rate
+sales_flat_shipment
+sales_flat_shipment_comment
+sales_flat_shipment_grid
+sales_flat_shipment_item
+sales_flat_shipment_track
+sales_invoiced_aggregated
+sales_invoiced_aggregated_order
+sales_order_aggregated_created
+sales_order_tax
+sales_payment_transaction
+sales_recurring_profile
+sales_recurring_profile_order
+sales_refunded_aggregated
+sales_refunded_aggregated_order
+sales_shipping_aggregated
+sales_shipping_aggregated_order
+salesrule_coupon_usage
+salesrule_customer
+sitemap
+tag
+tag_properties
+tag_relation
+tag_summary
+tax_order_aggregated_created
+wishlist
+wishlist_item
+wishlist_item_option
+xmlconnect_history
+xmlconnect_queue
+EOF;
+
+    const KNOWN_MAGENTO_CORE_TABLES = <<<EOF
 admin_assert
 admin_role
 admin_rule
@@ -514,13 +581,19 @@ catalog_category_entity_datetime
 catalog_category_entity_decimal
 catalog_category_entity_int
 catalog_category_entity_text
+catalog_category_entity_url_key
 catalog_category_entity_varchar
+catalog_category_flat_cl
 catalog_category_product
+catalog_category_product_cat_cl
 catalog_category_product_index
+catalog_category_product_index_cl
 catalog_category_product_index_enbl_idx
 catalog_category_product_index_enbl_tmp
 catalog_category_product_index_idx
 catalog_category_product_index_tmp
+catalog_category_smart_product_index
+catalog_category_smart_product_indexer_idx
 catalog_compare_item
 catalog_eav_attribute
 catalog_product_bundle_option
@@ -540,7 +613,9 @@ catalog_product_entity_media_gallery
 catalog_product_entity_media_gallery_value
 catalog_product_entity_text
 catalog_product_entity_tier_price
+catalog_product_entity_url_key
 catalog_product_entity_varchar
+catalog_product_flat_cl
 catalog_product_index_eav
 catalog_product_index_eav_decimal
 catalog_product_index_eav_decimal_idx
@@ -559,6 +634,7 @@ catalog_product_index_price_cfg_opt_agr_idx
 catalog_product_index_price_cfg_opt_agr_tmp
 catalog_product_index_price_cfg_opt_idx
 catalog_product_index_price_cfg_opt_tmp
+catalog_product_index_price_cl
 catalog_product_index_price_downlod_idx
 catalog_product_index_price_downlod_tmp
 catalog_product_index_price_final_idx
@@ -592,6 +668,7 @@ catalog_product_website
 cataloginventory_stock
 cataloginventory_stock_item
 cataloginventory_stock_status
+cataloginventory_stock_status_cl
 cataloginventory_stock_status_idx
 cataloginventory_stock_status_tmp
 catalogrule
@@ -602,6 +679,7 @@ catalogrule_product
 catalogrule_product_price
 catalogrule_website
 catalogsearch_fulltext
+catalogsearch_fulltext_cl
 catalogsearch_query
 catalogsearch_recommendations
 catalogsearch_result
@@ -694,6 +772,8 @@ enterprise_banner_catalogrule
 enterprise_banner_content
 enterprise_banner_customersegment
 enterprise_banner_salesrule
+enterprise_catalog_category_rewrite
+enterprise_catalog_product_rewrite
 enterprise_catalogevent_event
 enterprise_catalogevent_event_image
 enterprise_catalogpermissions
@@ -730,11 +810,17 @@ enterprise_giftregistry_type_info
 enterprise_giftwrapping
 enterprise_giftwrapping_store_attributes
 enterprise_giftwrapping_website
+enterprise_index_multiplier
 enterprise_invitation
 enterprise_invitation_status_history
 enterprise_invitation_track
 enterprise_logging_event
 enterprise_logging_event_changes
+enterprise_mview_event
+enterprise_mview_metadata
+enterprise_mview_metadata_event
+enterprise_mview_metadata_group
+enterprise_mview_subscriber
 enterprise_reminder_rule
 enterprise_reminder_rule_coupon
 enterprise_reminder_rule_log
@@ -771,9 +857,18 @@ enterprise_targetrule
 enterprise_targetrule_customersegment
 enterprise_targetrule_index
 enterprise_targetrule_index_crosssell
+enterprise_targetrule_index_crosssell_product
 enterprise_targetrule_index_related
+enterprise_targetrule_index_related_product
 enterprise_targetrule_index_upsell
+enterprise_targetrule_index_upsell_product
 enterprise_targetrule_product
+enterprise_url_rewrite
+enterprise_url_rewrite_category_cl
+enterprise_url_rewrite_product_cl
+enterprise_url_rewrite_redirect
+enterprise_url_rewrite_redirect_cl
+enterprise_url_rewrite_redirect_rewrite
 gift_message
 googlecheckout_notification
 importexport_importdata
