@@ -32,9 +32,10 @@ require 'abstract.php';
  */
 class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 {
+    const CONNECTION_TYPE = 'core_read';
+
     protected $config = array(
         'cleandata'         => false,
-        'connectiontype'    => 'core_read',
         'databaseconfig'    => null,
         'exclude-config'    => false,
         'exclude-eav-entity-store'    => false,
@@ -64,32 +65,11 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         }
 
         // Initialize database connection
-        $this->_db = Mage::getSingleton('core/resource')->getConnection($this->config['connectiontype']);
-
-        // Process custom tables
-        if ($this->getArg('custom')) {
-            $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
-            $this->_customTables = $cliCustomTables;
-        }
-        if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
-            $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
-            $this->_customTables = array_merge($this->_customTables, $fileCustomTables);
-        }
+        $this->_db = Mage::getSingleton('core/resource')->getConnection(self::CONNECTION_TYPE);
 
         // Configuration
-        $this->config['databaseconfig'] = Mage::getConfig()->getResourceConnectionConfig($this->config['connectiontype']);
+        $this->config['databaseconfig'] = Mage::getConfig()->getResourceConnectionConfig(self::CONNECTION_TYPE);
         $this->config['tableprefix']    = (string)Mage::getConfig()->getTablePrefix();
-
-        if ($this->getArg('clean')) {
-            $this->config['cleandata'] = true;
-        }
-        if ($this->getArg('exclude-config')) {
-            $this->config['exclude-config'] = true;
-        }
-        if ($this->getArg('exclude-eav-entity-store')) {
-            $this->config['exclude-eav-entity-store'] = true;
-        }
-
     }
 
     public function run()
@@ -121,28 +101,69 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
      */
     protected function _getMysqlConfigurationString()
     {
-        // Get connection info
         $magentoConfig = $this->config['databaseconfig'];
+        return "-h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
+    }
 
-        // Base configuration needed for mysql and mysqldump commands
-        $config = "-h {$magentoConfig->host} -u {$magentoConfig->username} -p{$magentoConfig->password} {$magentoConfig->dbname}";
-
-        return $config;
+    protected function _getMysqldumpCommand()
+    {
+        return $this->config['mysqldumpcommand'] . " " . $this->_getMysqlConfigurationString();
     }
 
     protected function _dump()
     {
+        if ($this->getArg('clean')) {
+            $this->_dumpClean();
+        } elseif ($this->getArg('tablesfile')) {
+            $this->_dumpTables();
+        } else {
+            $this->_dumpAll();
+        }
+    }
+
+    protected function _dumpAll()
+    {
+        passthru($this->_getMysqldumpCommand());
+        exit;
+    }
+
+    protected function _dumpTables()
+    {
+        // Tables to export
+        if ($this->getArg('tablesfile') && !is_readable($this->getArg('tablesfile'))) {
+            $this->_die('--tablesfile must be a readable file');
+        }
+        $tables = array_map('trim', file($this->getArg('tablesfile')));
+        $tables = $this->_getFinalTableNames($tables);
+        $tablesString = implode(" ", $tables);
+        passthru("{$this->_getMysqldumpCommand()} $tablesString");
+        exit;
+    }
+
+    protected function _dumpClean()
+    {
+        // Process custom tables
+        if ($this->getArg('custom')) {
+            $cliCustomTables = array_map('trim', explode(',', $this->getArg('custom')));
+            $this->_customTables = $cliCustomTables;
+        }
+        if ($this->getArg('customfile') && is_readable($this->getArg('customfile'))) {
+            $fileCustomTables = array_map('trim', file($this->getArg('customfile')));
+            $this->_customTables = array_merge($this->_customTables, $fileCustomTables);
+        }
+
+        if ($this->getArg('exclude-config')) {
+            $this->config['exclude-config'] = true;
+        }
+        if ($this->getArg('exclude-eav-entity-store')) {
+            $this->config['exclude-eav-entity-store'] = true;
+        }
+
         // Get connection info
         $magentoConfig = $this->config['databaseconfig'];
 
         // Base mysqldump command
-        $mysqldump = "{$this->config['mysqldumpcommand']} {$this->_getMysqlConfigurationString()}";
-
-        // If not cleaning just execute mysqldump with default settings
-        if (!$this->config['cleandata']) {
-            passthru("$mysqldump");
-            return;
-        }
+        $mysqldump = $this->_getMysqldumpCommand();
 
         $noDataTablesWhere = $this->_getNoDataTablesWhere();
 
@@ -235,6 +256,26 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         return $coretables;
     }
 
+    /**
+     * @param $tables
+     * @return array
+     */
+    protected function _getFinalTableNames($tables)
+    {
+        $magentoConfig = $this->config['databaseconfig'];
+        if ($this->config['tableprefix']) {
+            foreach ($tables as $i => $table) {
+                $coretables[$i] = "{$this->config['tableprefix']}$table";
+            }
+        }
+        $tablesWhere = $this->_createWhereFromArray($tables);
+        $tables = $this->_getConnection()->fetchCol("
+            SELECT TABLE_NAME FROM information_schema.TABLES
+            WHERE TABLE_NAME IN {$tablesWhere} AND TABLE_SCHEMA = '{$magentoConfig->dbname}'
+        ");
+        return $tables;
+    }
+
     protected function _getTablesWithData()
     {
         $magentoConfig     = $this->config['databaseconfig'];
@@ -315,6 +356,10 @@ Usage:  php -f magentodump.php -- [command] [options]
             Name of a file with a list of tables to export as structure only. One table
             name per line 
             (only applies when running with --clean)
+
+      --tablesfile <filename>
+            Path to a file which contains a list of tables to be exported.
+            One table name per line
 
       --exclude-config
             Do not dump the core_config_data table (configuration data) 
