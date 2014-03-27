@@ -123,7 +123,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 
     protected function _dumpAll()
     {
-        passthru($this->_getMysqldumpCommand());
+        $this->_runMysqldump();
         exit;
     }
 
@@ -135,8 +135,7 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         }
         $tables = array_map('trim', file($this->getArg('tablesfile')));
         $tables = $this->_getFinalTableNames($tables);
-        $tablesString = implode(" ", $tables);
-        passthru("{$this->_getMysqldumpCommand()} $tablesString");
+        $this->_runMysqldump(implode(" ", $tables));
         exit;
     }
 
@@ -161,9 +160,6 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
 
         // Get connection info
         $magentoConfig = $this->config['databaseconfig'];
-
-        // Base mysqldump command
-        $mysqldump = $this->_getMysqldumpCommand();
 
         $noDataTablesWhere = $this->_getNoDataTablesWhere();
 
@@ -192,10 +188,10 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
         $noDataTables = array_map('escapeshellarg', $noDataTables);
 
         // Dump tables with data
-        passthru("$mysqldump " . implode(' ', $dataTables) . $this->config['mysqldumpcommand_suffix']);
+        $this->_runMysqldump(implode(' ', $dataTables));
 
         // Dump tables without data
-        passthru("$mysqldump --no-data " . implode(' ', $noDataTables) . $this->config['mysqldumpcommand_suffix']);
+        $this->_runMysqldump("--no-data " . implode(' ', $noDataTables));
     }
 
     protected function _getConnection()
@@ -309,6 +305,16 @@ class Guidance_Shell_Magentodump extends Mage_Shell_Abstract
             }
         }
         return $coretables;
+    }
+
+    protected function _runMysqldump($command = "")
+    {
+        $execute = array(
+            $this->_getMysqldumpCommand(),
+            $command,
+            $this->config['mysqldumpcommand_suffix']
+        );
+        passthru(implode(" ", $execute));
     }
 
     protected function _die($message)
