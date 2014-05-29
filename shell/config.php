@@ -26,7 +26,7 @@
 require_once 'abstract.php';
 
 /**
- * Class Guidance_Shell_Magentodump
+ * Class Guidance_Shell_Config
  *
  * Used to export and compare the Magento configuration table core_config_data
  */
