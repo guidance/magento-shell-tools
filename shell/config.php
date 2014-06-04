@@ -33,7 +33,9 @@ require_once 'abstract.php';
 class Guidance_Shell_Config extends Mage_Shell_Abstract
 {
 
+    /** @var Mage_Core_Model_Config **/
     protected $_baseConfig;
+    
     /**
      * Run script
      *
@@ -107,8 +109,7 @@ class Guidance_Shell_Config extends Mage_Shell_Abstract
 
         /** @var Mage_Core_Model_Resource_Config_Data_Collection $collection */
         $collection = $config->getCollection();
-        $collection->removeFieldFromSelect('config_id')
-                ->addOrder('scope', 'ASC')
+        $collection->addOrder('scope', 'ASC')
                 ->addOrder('scope_id', 'ASC')
                 ->addOrder('path', 'ASC');
 
