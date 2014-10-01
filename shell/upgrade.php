@@ -55,9 +55,11 @@ class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
             echo "\n\n";
         }
 
-        echo "\n";
-        echo "Time For Upgrade: " . (microtime(true) - $start);
-        echo "\n\n";
+        if (!$this->getArg('quiet')) {
+            echo "\n";
+            echo "Time For Upgrade: " . (microtime(true) - $start);
+            echo "\n\n";
+        }
     }
 }
 
