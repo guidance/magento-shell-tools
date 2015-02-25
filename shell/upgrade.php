@@ -33,21 +33,45 @@ require_once dirname(__FILE__) . '/abstract.php';
  */
 class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
 {
-    public function run() {
+    /**
+     * Initialize application and parse input parameters
+     *
+     */
+    public function __construct()
+    {
+        if ($this->_includeMage) {
+            require_once $this->_getRootPath() . 'app' . DIRECTORY_SEPARATOR . 'Mage.php';
+            Mage::app($this->_appCode, $this->_appType, array('global_ban_use_cache' => true));
+        }
+        $this->_factory = new Mage_Core_Model_Factory();
+
+        $this->_applyPhpVariables();
+        $this->_parseArgs();
+        $this->_construct();
+        $this->_validate();
+        $this->_showHelp();
+    }
+
+    /**
+     * Run script
+     *
+     */
+    public function run()
+    {
         set_time_limit(0);
         ini_set('memory_limit', '2G');
 
         // should start the upgrade.
         $start = microtime(true);
 
-        if ($this->getArg('clean-cache')) {
-            $app = Mage::app('admin');
-            $app->cleanCache();
-        }
-
         try {
             Mage_Core_Model_Resource_Setup::applyAllUpdates();
             Mage_Core_Model_Resource_Setup::applyAllDataUpdates();
+
+            // Now enable caching and save
+            Mage::getConfig()->getOptions()->setData('global_ban_use_cache', FALSE);
+            Mage::app()->baseInit(array()); // Re-init cache
+            Mage::getConfig()->loadModules()->loadDb()->saveCache();
         } catch (Exception $e) {
             echo "\n";
             $e->getMessage();
@@ -62,7 +86,6 @@ class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
         }
     }
 }
-
 
 $shell = new Guidance_Shell_Upgrade();
 $shell->run();
