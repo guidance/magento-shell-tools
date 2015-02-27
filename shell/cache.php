@@ -251,6 +251,17 @@ class Guidance_Shell_Cache extends Mage_Shell_Abstract
         $this->cleanMedia();
         $this->flushSystem();
         $this->flushAll();
+        // Make manual call to clear FPC
+        $observer = Mage::getModel('guidance_pagecache/observer');
+        if($observer)
+        {
+            $observer->cleanCache();
+            echo "The FPC was manually cleaned.\n";
+        }
+        else
+        {
+            echo "The FPC was NOT manually cleaned.\n";
+        }
     }
 
     /**
