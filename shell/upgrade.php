@@ -68,6 +68,12 @@ class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
             Mage_Core_Model_Resource_Setup::applyAllUpdates();
             Mage_Core_Model_Resource_Setup::applyAllDataUpdates();
 
+            // Deep clean the cache backends
+            Mage::app()->getCache()->getBackend()->clean('all');
+            if (Mage::getEdition() == Mage::EDITION_ENTERPRISE) {
+                Enterprise_PageCache_Model_Cache::getCacheInstance()->getFrontend()->getBackend()->clean('all');
+            }
+
             // Now enable caching and save
             Mage::getConfig()->getOptions()->setData('global_ban_use_cache', FALSE);
             Mage::app()->baseInit(array()); // Re-init cache
