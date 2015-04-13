@@ -27,10 +27,10 @@
 require_once 'abstract.php';
 
 /**
- * Magento Log Shell Script
+ * Magento Attribute Option Import Script
  *
  * @category    Mage
- * @package     Mage_Shell
+ * @package     Mage_Shell_Attribute_Options
  * @author      Magento Core Team <core@magentocommerce.com>
  */
 class Mage_Shell_Attribute_Options extends Mage_Shell_Abstract
