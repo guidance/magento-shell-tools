@@ -65,6 +65,12 @@ class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
         $start = microtime(true);
 
         try {
+		    //make upgrade scripts be executed from Admin store, not from default with ID = 1
+		    Mage::app()->setUpdateMode(true);
+            Mage::app()->getStore()
+                ->setId(Mage_Core_Model_App::ADMIN_STORE_ID)
+                ->setCode('admin');
+		
             Mage_Core_Model_Resource_Setup::applyAllUpdates();
             Mage_Core_Model_Resource_Setup::applyAllDataUpdates();
 
