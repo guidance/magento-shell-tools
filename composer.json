@@ -1,0 +1,23 @@
+{
+    "name": "guidance/magento-shell-tools",
+    "type": "magento-module",
+    "license": "Apache-2.0",
+    "description": "Manage Magento with CLI tools.",
+    "authors":[
+        {
+            "name": "Ticean Bennet",
+            "email": "ticean@gmail.com"
+        },
+        {
+            "name": "Gordon Knoppe",
+            "email": "gknop@guidance.com"
+        },
+        {
+            "name": "Andrey Moskvenkov",
+            "email": "andrey.moskvenkov@guidance.com"
+        }
+    ],
+    "require": {
+        "magento-hackathon/magento-composer-installer": "*"
+    }
+}
