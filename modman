@@ -1,5 +1,7 @@
+shell/cache-garbage-collection.php shell/cache-garbage-collection.php
 shell/cache.php shell/cache.php
 shell/config.php shell/config.php
+shell/import_attribute_options.php shell/import_attribute_options.php
 shell/magentodump.php shell/magentodump.php
 shell/snapshot.php shell/snapshot.php
 shell/upgrade.php shell/upgrade.php
