@@ -60,6 +60,11 @@ class Guidance_Shell_Upgrade extends Mage_Shell_Abstract
     {
         set_time_limit(0);
         ini_set('memory_limit', '2G');
+        
+        //prevent first deploy from failing
+        if (!Mage::isInstalled()) {
+            return;
+        }
 
         // should start the upgrade.
         $start = microtime(true);
